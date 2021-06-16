@@ -34,7 +34,7 @@ SECRET_KEY = env("SECRET_KEY")
 DEBUG = int(env("DEBUG"))
 
 ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS").split(" ")
-
+# ALLOWED_HOSTS = ['*']
 
 # Application definition
 
