@@ -1,21 +1,13 @@
 # download Python version 3.5
-sudo apt-get update
-sudo apt-get install -y python3.5
-sudo apt-get install -y python3.5-dev
+sudo apt update
+sudo apt install python3.5 -y
+sudo apt install python3.5-dev -y
 
 # /usr/bin/python3 is a link to /usr/bin/python3.5
 sudo unlink /usr/bin/python3
 sudo ln -s /usr/bin/python3.5 /usr/bin/python3
 
-# uninstall incompatible PIP provided by distro repository
-sudo apt remove --purge python3-pip
-# download a get-pip.py version which is compatible with my Python version 3.5
-curl -O https://bootstrap.pypa.io/pip/3.5/get-pip.py
-# install pip
-sudo python3 get-pip.py
-# Check version:
-python3 -m pip --version
-
-
-sudo pip3 install --upgrade django==2.1
-sudo pip3 install --upgrade gunicorn
+# install dependenсies
+sudo python3 -m pip install gunicorn
+sudo python3 -m pip install django==2.0
+sudo python3 -m pip install mysqlclient
