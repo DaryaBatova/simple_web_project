@@ -1,13 +1,13 @@
 from django.urls import path
-from .views import test
+from .views import *
 
 
 urlpatterns = [
-    path('', test),
+    path('', question_list_new, name='new_questions'),
     path('login/', test, name='login'),
     path('signup/', test, name='signup'),
-    path('question/<int:id>/', test, name='question'),
+    path('question/<int:id>/', question_view, name='question'),
     path('ask/', test, name='ask'),
-    path('popular/', test, name='popular'),
+    path('popular/', question_list_popular, name='popular'),
     path('new/', test, name='new'),
 ]
