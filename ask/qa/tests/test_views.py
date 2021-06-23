@@ -1,9 +1,16 @@
+import unittest
+from unittest.mock import patch, Mock
 from django.test import TestCase
+from django.http import HttpRequest
+from django.contrib.auth.models import User
+from django.urls import reverse, resolve
+from django.utils.html import escape
 
 from qa.models import Question, Answer
 from qa.views import *
-from django.contrib.auth.models import User
-from django.urls import reverse, resolve
+from qa.forms import (
+    EMPTY_TITLE_ERROR, EMPTY_TEXT_ERROR, AskForm
+)
 
 from datetime import date, timedelta
 
@@ -46,7 +53,6 @@ class QuestionListNewTest(TestCase):
         resp = self.client.get(reverse('new_questions'))
         self.assertEqual(resp.status_code, 200)
         self.assertTrue('paginator' in resp.context)
-        # self.assertTrue('page' in resp.context)
         self.assertTrue(hasattr(resp.context['paginator'], 'count'))
         self.assertTrue(hasattr(resp.context['paginator'], 'num_pages'))
         self.assertTrue(hasattr(resp.context['paginator'], 'page_range'))
@@ -64,18 +70,17 @@ class QuestionListNewTest(TestCase):
 
     def test_page_returns_correct_html(self):
         resp = self.client.get(reverse('new_questions')+'?page=2')
-        html = resp.content.decode('utf8')
-        self.assertIn('Question 0', html)
-        self.assertIn('Question 1', html)
-        self.assertIn('Question 2', html)
-        self.assertNotIn('Question 3', html)
+        self.assertContains(resp, escape('Question 0'))
+        self.assertContains(resp, escape('Question 1'))
+        self.assertContains(resp, escape('Question 2'))
+        self.assertNotContains(resp, escape('Question 3'))
 
 
 class QuestionListPopularTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        #Create 13 questions for pagination tests
+        # Create 13 questions for pagination tests
         number_of_questions = 13
         user = User.objects.create(username='test', password='test')
         for question_num in range(number_of_questions):
@@ -106,18 +111,17 @@ class QuestionListPopularTest(TestCase):
 
     def test_page_returns_correct_html(self):
         resp = self.client.get(reverse('popular')+'?page=2')
-        html = resp.content.decode('utf8')
-        self.assertIn('Question 0', html)
-        self.assertIn('Question 1', html)
-        self.assertIn('Question 2', html)
-        self.assertNotIn('Question 3', html)
+        self.assertContains(resp, escape('Question 0'))
+        self.assertContains(resp, escape('Question 1'))
+        self.assertContains(resp, escape('Question 2'))
+        self.assertNotContains(resp, escape('Question 3'))
 
 
 class QuestionViewTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        #Create 2 questions for tests
+        # Create 2 questions for tests
         number_of_questions = 2
         user = User.objects.create(username='test', password='test')
         for question_num in range(number_of_questions):
@@ -143,8 +147,6 @@ class QuestionViewTest(TestCase):
         self.assertTemplateUsed(resp, 'question.html')
 
     def test_view_existing_questions_accessible_by_name(self):
-        # resp = self.client.head(reverse('question', kwargs={'id': 1}))
-        # self.assertTrue(resp.request['Location'])
         resp = self.client.get(reverse('question', kwargs={'id': 1}))
         self.assertEqual(resp.status_code, 200)
         resp = self.client.get(reverse('question', kwargs={'id': 2}))
@@ -165,12 +167,11 @@ class QuestionViewTest(TestCase):
                 author=q.author
             )
         resp = self.client.get(reverse('question', kwargs={'id': 1}))
-        html = resp.content.decode('utf8')
-        self.assertIn('Question 0', html)
-        self.assertIn('text 0', html)
-        self.assertIn('Answer 0', html)
-        self.assertIn('Answer 1', html)
-        self.assertIn('Answer 2', html)
+        self.assertContains(resp, escape('Question 0'))
+        self.assertContains(resp, escape('text 0'))
+        self.assertContains(resp, escape('Answer 0'))
+        self.assertContains(resp, escape('Answer 1'))
+        self.assertContains(resp, escape('Answer 2'))
 
 
 class LoginPageTest(TestCase):
@@ -189,9 +190,47 @@ class SignupPageTest(TestCase):
         self.assertEqual(found.func, test)
 
 
-class AskPageTest(TestCase):
-    '''тест страницы добавления вопроса'''
+class AddQuestionViewIntegratedTest(TestCase):
 
-    def test_ask_url_resolves_to_page_view(self):
-        found = resolve('/ask/')
-        self.assertEqual(found.func, test)
+    def test_uses_ask_form_template(self):
+        response = self.client.get('/ask/')
+        self.assertTemplateUsed(response, 'ask_form.html')
+
+    def test_ask_page_uses_ask_form(self):
+        response = self.client.get('/ask/')
+        self.assertIsInstance(response.context['form'], AskForm)
+
+    def test_can_save_a_POST_request(self):
+        post_data = {'title': 'Question 1', 'text': 'A new question'}
+        self.client.post('/ask/', data=post_data)
+        self.assertEqual(Question.objects.count(), 1)
+        new_question = Question.objects.first()
+        self.assertEqual(new_question.title, 'Question 1')
+        self.assertEqual(new_question.text, 'A new question')
+        self.assertEqual(new_question.author, None)
+
+    def test_for_invalid_input_doesnt_save_but_shows_errors(self):
+        post_data = {'title': '', 'text': ''}
+        response = self.client.post('/ask/', data=post_data)
+        self.assertEqual(Question.objects.count(), 0)
+        self.assertContains(response, escape(EMPTY_TITLE_ERROR))
+        self.assertContains(response, escape(EMPTY_TEXT_ERROR))
+
+    def test_question_author_is_saved_if_user_is_authenticated(self):
+        # TODO fix this method
+        user = User.objects.create(email='a@b.com')
+        self.client.force_login(user)
+        self.client.post('/ask/', data={'title': 'Question', 'text': 'new question'})
+        question_ = Question.objects.first()
+        self.assertEqual(question_.author, user.id)
+
+    def test_redirects_to_form_returned_object_if_form_valid(self):
+        post_data = {'title': 'Question 1', 'text': 'A new question'}
+        response = self.client.post('/ask/', data=post_data)
+        question_ = Question.objects.first()
+        self.assertRedirects(response, f'/question/{question_.id}/')
+
+    def test_renders_template_with_form_if_form_invalid(self):
+        post_data = {'title': '', 'text': ''}
+        response = self.client.post('/ask/', data=post_data)
+        self.assertTemplateUsed(response, 'ask_form.html')
