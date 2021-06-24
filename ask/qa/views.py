@@ -3,7 +3,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.http import Http404
 from django.core.paginator import Paginator
 from qa.models import Question
-from qa.forms import AskForm
+from qa.forms import AskForm, AnswerForm
 
 def test(request, *args, **kwargs):
     return HttpResponse('OK')
@@ -40,9 +40,21 @@ def question_list_popular(request):
 
 def question_view(request, id):
     question = get_object_or_404(Question, pk=id)
+    if request.method == 'POST':
+        request.POST = request.POST.copy()
+        request.POST['question'] = question.id
+        # request.data._mutable = False
+        form = AnswerForm(request.POST)
+        if form.is_valid():
+            answer = form.save()
+            question = answer.question
+            return HttpResponseRedirect(question.get_absolute_url())
+    else:
+        form = AnswerForm()
     content = {
         'question': question,
-        'answers': question.answer_set.all()
+        'answers': question.answer_set.all(),
+        'form': form
     }
     return render(request, 'question.html', content)
 
