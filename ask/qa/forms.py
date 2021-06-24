@@ -1,10 +1,10 @@
 from django import forms
 from django.contrib.auth.models import User
 
-from qa.models import Question
+from qa.models import Question, Answer
 
 EMPTY_TITLE_ERROR = "You can't have an empty question title"
-EMPTY_TEXT_ERROR = "You can't have an empty question text"
+EMPTY_TEXT_ERROR = "You can't have an empty text"
 
 
 class AskForm(forms.Form):
@@ -20,3 +20,26 @@ class AskForm(forms.Form):
         question = Question(**self.cleaned_data)
         question.save()
         return question
+
+
+class AnswerForm(forms.Form):
+    text = forms.CharField(widget=forms.Textarea, label="Answer text",
+                            error_messages={'required': EMPTY_TEXT_ERROR})
+    question = forms.IntegerField(widget=forms.HiddenInput)
+
+    def clean_question(self):
+        question_id = self.cleaned_data['question']
+        try:
+            question = Question.objects.get(pk=question_id)
+        except Question.DoesNotExist:
+            # question = None
+            raise forms.ValidationError("This question doesn't exist")
+        return question
+
+    def clean(self):
+        pass
+
+    def save(self):
+        answer = Answer(**self.cleaned_data)
+        answer.save()
+        return answer
