@@ -9,7 +9,7 @@ from django.utils.html import escape
 from qa.models import Question, Answer
 from qa.views import *
 from qa.forms import (
-    EMPTY_TITLE_ERROR, EMPTY_TEXT_ERROR, AskForm
+    EMPTY_TITLE_ERROR, EMPTY_TEXT_ERROR, AskForm, AnswerForm
 )
 
 from datetime import date, timedelta
@@ -19,7 +19,7 @@ class QuestionListNewTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        #Create 13 questions for pagination tests
+        # Create 13 questions for pagination tests
         number_of_questions = 13
         user = User.objects.create(username='test', password='test')
         for question_num in range(number_of_questions):
@@ -173,6 +173,79 @@ class QuestionViewTest(TestCase):
         self.assertContains(resp, escape('Answer 1'))
         self.assertContains(resp, escape('Answer 2'))
 
+    def test_question_page_uses_answer_form(self):
+        response = self.client.get(reverse('question', kwargs={'id': 1}))
+        self.assertIsInstance(response.context['form'], AnswerForm)
+
+    def test_can_save_a_POST_request_to_an_existing_question(self):
+        question = Question.objects.get(pk=1)
+        response = self.client.get(f'/question/{question.id}/')
+        self.assertEqual(response.context['question'], question)
+        self.assertFalse(response.context['answers'])
+
+        response = self.client.post(
+            f'/question/{question.id}/',
+            data={'text': 'A new answer for an existing question'}
+        )
+        self.assertEqual(Answer.objects.count(), 1)
+        new_answer = Answer.objects.first()
+        self.assertEqual(new_answer.text, 'A new answer for an existing question')
+        self.assertEqual(new_answer.question, question)
+        self.assertEqual(new_answer.author, None)
+
+    def test_for_invalid_input_doesnt_save_but_shows_errors(self):
+        post_data = {'text': ''}
+        response = self.client.post(reverse('question', kwargs={'id': 1}), data=post_data)
+        self.assertEqual(Answer.objects.count(), 0)
+        self.assertContains(response, escape(EMPTY_TEXT_ERROR))
+
+    def test_answer_author_is_saved_if_user_is_authenticated(self):
+        # TODO fix this method
+        user = User.objects.create(email='a@b.com')
+        self.client.force_login(user)
+        self.client.post(reverse('question', kwargs={'id': 1}), data={'text': 'new answer'})
+        new_answer = Answer.objects.first()
+        # author is None for now
+        self.assertEqual(new_answer.author, user.id)
+
+    def test_redirects_to_form_returned_object_if_form_valid(self):
+        question = Question.objects.get(pk=1)
+        post_data = {'text': 'A new answer'}
+        response = self.client.post(reverse('question', kwargs={'id': 1}), data=post_data)
+        new_answer = Answer.objects.first()
+        self.assertEqual(new_answer.question, question)
+        self.assertRedirects(response, f'/question/{new_answer.question.id}/')
+
+    def test_new_answer_display_on_question_page_after_redirect(self):
+        question = Question.objects.get(pk=1)
+        for answer_num in range(2):
+            Answer.objects.create(
+                text='Answer ' + str(answer_num),
+                question=question,
+                author=question.author
+            )
+        response = self.client.get(reverse('question', kwargs={'id': 1}))
+        self.assertContains(response, escape('Question 0'))
+        self.assertContains(response, escape('text 0'))
+        self.assertContains(response, escape('Answer 0'))
+        self.assertContains(response, escape('Answer 1'))
+
+        post_data = {'text': 'A new answer'}
+        self.client.post(reverse('question', kwargs={'id': 1}), data=post_data)
+        new_answer = Answer.objects.first()
+        response = self.client.get(f'/question/{new_answer.question.id}/')
+        self.assertContains(response, escape('Question 0'))
+        self.assertContains(response, escape('text 0'))
+        self.assertContains(response, escape('Answer 0'))
+        self.assertContains(response, escape('Answer 1'))
+        # new answer displayed
+        self.assertContains(response, escape('A new answer'))
+
+    def test_renders_template_with_form_if_form_invalid(self):
+        post_data = {'text': ''}
+        response = self.client.post(reverse('question', kwargs={'id': 1}), data=post_data)
+        self.assertTemplateUsed(response, 'question.html')
+
 
 class LoginPageTest(TestCase):
     '''тест страницы авторизации'''
@@ -222,6 +295,7 @@ class AddQuestionViewIntegratedTest(TestCase):
         self.client.force_login(user)
         self.client.post('/ask/', data={'title': 'Question', 'text': 'new question'})
         question_ = Question.objects.first()
+        # author is None for now
         self.assertEqual(question_.author, user.id)
 
     def test_redirects_to_form_returned_object_if_form_valid(self):
