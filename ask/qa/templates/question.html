@@ -7,10 +7,22 @@
 <body>
     <h1>{{ question.title }}</h1>
     <div>{{ question.text }}</div>
+    <hr>
     <ul>
     {% for answer in answers %}
         <li>{{ answer.text }} {{ answer.author_id }}</li>
     {% endfor %}
     </ul>
+    <hr>
+    <form method="post" action="{{ question.get_absolute_url }}">
+        <fieldset>
+        {% csrf_token %}
+        {{ form.as_p }}
+        </fieldset>
+        <button type="submit"> Ответить </button>
+    </form>
+    <hr>
+    <div><a href="/ask/"> Ask a new question </a></div>
+    <div><a href="/"> Return to main page </a></div>
 </body>
 </html> 
