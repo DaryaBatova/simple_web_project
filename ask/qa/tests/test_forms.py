@@ -1,10 +1,13 @@
 from django.test import TestCase
+from django.contrib.auth.models import User
 
 from qa.forms import (
-    EMPTY_TITLE_ERROR, EMPTY_TEXT_ERROR, AskForm, AnswerForm
+    EMPTY_TITLE_ERROR, EMPTY_TEXT_ERROR, AskForm, AnswerForm,
+    EMPTY_USERNAME_ERROR, EMPTY_EMAIL_ERROR, EMPTY_PASSWORD_ERROR, SignupForm
 )
 
 from qa.models import Question, Answer
+
 
 class AskFormTest(TestCase):
 
@@ -17,7 +20,7 @@ class AskFormTest(TestCase):
         self.assertTrue(form.fields['text'].label == 'Question text')
 
     def test_ask_form_validation_for_blank_title_and_text(self):
-        form = AskForm(data={'title':'', 'text': ''})
+        form = AskForm(data={'title': '', 'text': ''})
         self.assertFalse(form.is_valid())
         self.assertEqual(form.errors['title'], [EMPTY_TITLE_ERROR])
         self.assertEqual(form.errors['text'], [EMPTY_TEXT_ERROR])
@@ -68,7 +71,7 @@ class AnswerFormTest(TestCase):
         self.assertTrue(form.is_valid())
 
     def test_answer_form_is_invalid(self):
-        # post request to non-existen question
+        # post request to nonexistent question
         self.assertFalse(Question.objects.filter(pk=1).exists())
         form_data = {'text': 'Form is valid?', 'question': 1}
         form = AnswerForm(form_data)
@@ -87,3 +90,87 @@ class AnswerFormTest(TestCase):
         saved_answer = form.save()
         self.assertEqual(Answer.objects.count(), 1)
         self.assertTrue(saved_answer in question.answer_set.all())
+
+
+class SignupFormTest(TestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        username = 'test-user'
+        email = 'a@b.com'
+        cls.form_data = {'username': username, 'email': email}
+
+    def test_signup_form_validation_for_blank_fields(self):
+        form = SignupForm(data={'username': '', 'email': '', 'password': ''})
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors['username'], [EMPTY_USERNAME_ERROR])
+        self.assertEqual(form.errors['email'], [EMPTY_EMAIL_ERROR])
+        self.assertEqual(form.errors['password'], [EMPTY_PASSWORD_ERROR])
+
+    def test_signup_form_invalid_if_password_with_short_length(self):
+        # test method clean_password (MinimumLength validator)
+        short_password = '1234567'
+        form_data = self.form_data
+        form_data['password'] = short_password
+        form = SignupForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertTrue('This password is too short' in str(form.errors['password']))
+
+    def test_signup_form_invalid_if_password_is_numeric(self):
+        # test method clean_password (NumericPassword validator)
+        numeric_password = '12345678'
+        form_data = self.form_data
+        form_data['password'] = numeric_password
+        form = SignupForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertTrue('This password is entirely numeric' in str(form.errors['password']))
+
+    def test_signup_form_invalid_if_password_is_unreliable(self):
+        # test method clean_password (own validator)
+        unreliable_password = '1234a5678'
+        form_data = self.form_data
+        form_data['password'] = unreliable_password
+        form = SignupForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertTrue('Password is weak' in str(form.errors['password']))
+
+    def test_signup_form_valid_if_password_is_reliable(self):
+        # test method clean_password
+        reliable_password = '12a3W@mя45'
+        form_data = self.form_data
+        form_data['password'] = reliable_password
+        form = SignupForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_signup_form_save_user_if_form_valid(self):
+        # test method save
+        reliable_password = '12a3W@mя45'
+        form_data = self.form_data
+        form_data['password'] = reliable_password
+        form = SignupForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+        saved_user = form.save()
+        self.assertEqual(User.objects.count(), 1)
+        user_in_db = User.objects.first()
+        self.assertEqual(saved_user.username, user_in_db.username)
+        self.assertEqual(saved_user.email, user_in_db.email)
+        self.assertEqual(saved_user.password, user_in_db.password)
+
+    def test_signup_form_wont_save_users_with_the_same_name(self):
+        # test method clean_username
+        reliable_password = '12a3W@mя45'
+        form_data = self.form_data
+        form_data['password'] = reliable_password
+        form = SignupForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+        saved_user = form.save()
+        self.assertEqual(saved_user.username, 'test-user')
+        self.assertEqual(User.objects.count(), 1)
+
+        new_form_data = self.form_data
+        form = SignupForm(data=new_form_data)
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.errors['username'], [f"A user with name {saved_user.username} already exists"])
+        self.assertEqual(User.objects.count(), 1)
