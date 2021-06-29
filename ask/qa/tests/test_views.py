@@ -10,7 +10,7 @@ from qa.models import Question, Answer
 from qa.views import *
 from qa.forms import (
     EMPTY_TITLE_ERROR, EMPTY_TEXT_ERROR, AskForm, AnswerForm,
-    EMPTY_USERNAME_ERROR, EMPTY_EMAIL_ERROR, EMPTY_PASSWORD_ERROR, SignupForm
+    EMPTY_USERNAME_ERROR, EMPTY_EMAIL_ERROR, EMPTY_PASSWORD_ERROR, SignupForm, LoginForm
 )
 
 
@@ -249,9 +249,71 @@ class QuestionViewTest(TestCase):
 class LoginPageTest(TestCase):
     """Login page test"""
 
+    @classmethod
+    def setUpTestData(cls):
+        # Create 1 user for tests
+        from django.contrib.auth.hashers import make_password
+        password = make_password('12a3W@mя45')
+        User.objects.create(username='test-user', email='a@b.com', password=password)
+
     def test_login_url_resolves_to_page_view(self):
         found = resolve('/login/')
-        self.assertEqual(found.func, test)
+        self.assertEqual(found.func, login_view)
+
+    def test_login_page_uses_template_login(self):
+        response = self.client.get(reverse('login'))
+        self.assertTemplateUsed(response, 'login_form.html')
+
+    def test_login_page_uses_login_form(self):
+        response = self.client.get(reverse('login'))
+        self.assertIsInstance(response.context['form'], LoginForm)
+
+    def test_can_save_a_POST_request(self):
+        from django.contrib.auth import authenticate
+        user = authenticate(username='test-user', password='12a3W@mя45')
+        self.assertIsNotNone(user)
+
+        post_data = {'username': 'test-user', 'password': '12a3W@mя45'}
+        response = self.client.post(reverse('login'), data=post_data)
+        self.assertTemplateNotUsed(response, 'login_form.html')
+
+    def test_before_login_the_session_isnt_created(self):
+        response = self.client.get(reverse('login'))
+        self.assertIsNone(response.context['session'].session_key)
+        self.assertNotIsInstance(response.context['user'], User)
+
+    def test_after_login_the_session_is_created(self):
+        user = User.objects.first()
+        post_data = {'username': 'test-user', 'password': '12a3W@mя45'}
+        self.client.post(reverse('login'), data=post_data)
+        # after login
+        response = self.client.get(reverse('login'))
+        self.assertIsNotNone(response.context['session'].session_key)
+        self.assertEqual(response.context['user'], user)
+
+        new_response = self.client.get(reverse('popular'))
+        self.assertIsNotNone(new_response.context['session'].session_key)
+        self.assertEqual(response.context['session'].session_key, new_response.context['session'].session_key)
+
+    def test_for_invalid_input_shows_errors(self):
+        post_data = {'username': '', 'password': ''}
+        response = self.client.post(reverse('login'), data=post_data)
+        self.assertContains(response, escape(EMPTY_USERNAME_ERROR))
+        self.assertContains(response, escape(EMPTY_PASSWORD_ERROR))
+
+    def test_redirects_to_page_with_new_questions_if_form_valid(self):
+        from django.contrib.auth.hashers import make_password
+        password = make_password('12a3W@mя45')
+        User.objects.create(username='test-user', email='a@b.com', password=password)
+
+        post_data = {'username': 'test-user', 'password': '12a3W@mя45'}
+        response = self.client.post(reverse('login'), data=post_data)
+        self.assertRedirects(response, reverse('new_questions'))
+
+    def test_renders_template_with_form_if_form_invalid(self):
+        post_data = {'username': '', 'password': ''}
+        response = self.client.post(reverse('login'), data=post_data)
+        self.assertTemplateUsed(response, 'login_form.html')
 
 
 class SignupPageTest(TestCase):
