@@ -3,8 +3,10 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.http import Http404
 from django.core.paginator import Paginator
 from django.urls import reverse
+from django.contrib.auth import authenticate, login
+
 from qa.models import Question
-from qa.forms import AskForm, AnswerForm, SignupForm
+from qa.forms import AskForm, AnswerForm, SignupForm, LoginForm
 
 
 def test(request, *args, **kwargs):
@@ -84,3 +86,18 @@ def signup(request):
     else:
         form = SignupForm()
     return render(request, 'signup_form.html', {'form': form})
+
+
+def login_view(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        form = LoginForm(request.POST)
+        if form.is_valid():
+            user = authenticate(request, username=username, password=password)
+            if user is not None:
+                login(request, user)
+                return HttpResponseRedirect(reverse('new_questions'))
+    else:
+        form = LoginForm()
+    return render(request, 'login_form.html', {'form': form, 'session': request.session, 'user': request.user})
