@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch, Mock
+from datetime import date, timedelta
 from django.test import TestCase
-from django.http import HttpRequest
 from django.contrib.auth.models import User
 from django.urls import reverse, resolve
 from django.utils.html import escape
@@ -9,10 +9,9 @@ from django.utils.html import escape
 from qa.models import Question, Answer
 from qa.views import *
 from qa.forms import (
-    EMPTY_TITLE_ERROR, EMPTY_TEXT_ERROR, AskForm, AnswerForm
+    EMPTY_TITLE_ERROR, EMPTY_TEXT_ERROR, AskForm, AnswerForm,
+    EMPTY_USERNAME_ERROR, EMPTY_EMAIL_ERROR, EMPTY_PASSWORD_ERROR, SignupForm
 )
-
-from datetime import date, timedelta
 
 
 class QuestionListNewTest(TestCase):
@@ -152,7 +151,7 @@ class QuestionViewTest(TestCase):
         resp = self.client.get(reverse('question', kwargs={'id': 2}))
         self.assertEqual(resp.status_code, 200)
 
-    def test_view_non_existen_question(self):
+    def test_view_nonexistent_question(self):
         self.assertFalse(Question.objects.filter(pk=3).exists())
         resp = self.client.get(reverse('question', kwargs={'id': 3}))
         self.assertEqual(resp.status_code, 404)
@@ -248,7 +247,7 @@ class QuestionViewTest(TestCase):
 
 
 class LoginPageTest(TestCase):
-    '''тест страницы авторизации'''
+    """Login page test"""
 
     def test_login_url_resolves_to_page_view(self):
         found = resolve('/login/')
@@ -256,14 +255,49 @@ class LoginPageTest(TestCase):
 
 
 class SignupPageTest(TestCase):
-    '''тест страницы регистрации'''
+    """Registration page test"""
 
     def test_signup_url_resolves_to_page_view(self):
         found = resolve('/signup/')
-        self.assertEqual(found.func, test)
+        self.assertEqual(found.func, signup)
+
+    def test_signup_page_uses_template_signup(self):
+        response = self.client.get(reverse('signup'))
+        self.assertTemplateUsed(response, 'signup_form.html')
+
+    def test_signup_page_uses_signup_form(self):
+        response = self.client.get(reverse('signup'))
+        self.assertIsInstance(response.context['form'], SignupForm)
+
+    def test_can_save_a_POST_request(self):
+        post_data = {'username': 'test-user', 'email': 'a@b.com', 'password': '12a3W@mя45'}
+        self.client.post(reverse('signup'), data=post_data)
+        self.assertEqual(User.objects.count(), 1)
+        new_user = User.objects.first()
+        self.assertEqual(new_user.username, 'test-user')
+        self.assertEqual(new_user.email, 'a@b.com')
+
+    def test_for_invalid_input_doesnt_save_but_shows_errors(self):
+        post_data = {'username': '', 'email': '', 'password': ''}
+        response = self.client.post(reverse('signup'), data=post_data)
+        self.assertEqual(User.objects.count(), 0)
+        self.assertContains(response, escape(EMPTY_USERNAME_ERROR))
+        self.assertContains(response, escape(EMPTY_EMAIL_ERROR))
+        self.assertContains(response, escape(EMPTY_PASSWORD_ERROR))
+
+    def test_redirects_to_page_with_new_questions_if_form_valid(self):
+        post_data = {'username': 'test-user', 'email': 'a@b.com', 'password': '12a3W@mя45'}
+        response = self.client.post(reverse('signup'), data=post_data)
+        self.assertRedirects(response, reverse('new_questions'))
+
+    def test_renders_template_with_form_if_form_invalid(self):
+        post_data = {'username': '', 'email': '', 'password': ''}
+        response = self.client.post(reverse('signup'), data=post_data)
+        self.assertTemplateUsed(response, 'signup_form.html')
 
 
-class AddQuestionViewIntegratedTest(TestCase):
+class AddQuestionViewTest(TestCase):
+    """Ask page test"""
 
     def test_uses_ask_form_template(self):
         response = self.client.get('/ask/')
