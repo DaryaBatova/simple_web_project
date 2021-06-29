@@ -69,7 +69,7 @@ class SignupForm(forms.Form):
     def clean_username(self):
         username = self.cleaned_data['username']
         if username in User.objects.values_list('username', flat=True):
-            raise forms.ValidationError("A user with the same name already exists")
+            raise forms.ValidationError(f"A user with name {username} already exists")
         return username
 
     def clean_password(self):
