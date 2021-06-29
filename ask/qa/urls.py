@@ -4,7 +4,7 @@ from .views import *
 
 urlpatterns = [
     path('', question_list_new, name='new_questions'),
-    path('login/', test, name='login'),
+    path('login/', login_view, name='login'),
     path('signup/', signup, name='signup'),
     path('question/<int:id>/', question_view, name='question'),
     path('ask/', ask_add, name='ask'),
