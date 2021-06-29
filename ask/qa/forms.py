@@ -2,7 +2,7 @@ import re
 from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 
 from qa.models import Question, Answer
 
@@ -86,3 +86,19 @@ class SignupForm(forms.Form):
         user = User(**self.cleaned_data)
         user.save()
         return user
+
+
+class LoginForm(forms.Form):
+    username = forms.CharField(max_length=100, error_messages={'required': EMPTY_USERNAME_ERROR})
+    password = forms.CharField(widget=forms.PasswordInput, max_length=256,
+                               error_messages={'required': EMPTY_PASSWORD_ERROR})
+
+    def clean(self):
+        username = self.cleaned_data.get('username')
+        password = self.cleaned_data.get('password')
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            raise forms.ValidationError("Username or password is incorrect")
+        if not check_password(password, user.password):
+            raise forms.ValidationError("Username or password is incorrect")
