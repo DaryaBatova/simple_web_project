@@ -2,14 +2,16 @@ from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, HttpResponseRedirect
 from django.http import Http404
 from django.core.paginator import Paginator
+from django.urls import reverse
 from qa.models import Question
-from qa.forms import AskForm, AnswerForm
+from qa.forms import AskForm, AnswerForm, SignupForm
+
 
 def test(request, *args, **kwargs):
     return HttpResponse('OK')
 
+
 def paginate(request, qs, base_url):
-    # qs = Question.objects.popular()
     limit = 10
     page = request.GET.get('page', 1)
     try:
@@ -30,20 +32,22 @@ def paginate(request, qs, base_url):
     }
     return render(request, 'questions_new.html', content)
 
+
 def question_list_new(request):
     qs = Question.objects.new()
     return paginate(request, qs, base_url='/?page=')
 
+
 def question_list_popular(request):
     qs = Question.objects.popular()
-    return paginate(request, qs, base_url='/popular/?page=')
+    return paginate(request, qs, base_url=reverse('popular') + '?page=')
+
 
 def question_view(request, id):
     question = get_object_or_404(Question, pk=id)
     if request.method == 'POST':
         request.POST = request.POST.copy()
         request.POST['question'] = question.id
-        # request.data._mutable = False
         form = AnswerForm(request.POST)
         if form.is_valid():
             answer = form.save()
@@ -58,6 +62,7 @@ def question_view(request, id):
     }
     return render(request, 'question.html', content)
 
+
 def ask_add(request):
     if request.method == 'POST':
         form = AskForm(request.POST)
@@ -67,3 +72,15 @@ def ask_add(request):
     else:
         form = AskForm()
     return render(request, 'ask_form.html', {'form': form})
+
+
+def signup(request):
+    if request.method == 'POST':
+        form = SignupForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            # TODO вход на сайт
+            return HttpResponseRedirect(reverse('new_questions'))
+    else:
+        form = SignupForm()
+    return render(request, 'signup_form.html', {'form': form})
