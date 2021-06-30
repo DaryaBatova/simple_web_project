@@ -52,7 +52,11 @@ def question_view(request, id):
         request.POST['question'] = question.id
         form = AnswerForm(request.POST)
         if form.is_valid():
+            if not request.user.is_authenticated:
+                return HttpResponseRedirect(reverse('login'))
             answer = form.save()
+            answer.author = request.user
+            answer.save()
             question = answer.question
             return HttpResponseRedirect(question.get_absolute_url())
     else:
@@ -60,7 +64,9 @@ def question_view(request, id):
     content = {
         'question': question,
         'answers': question.answer_set.all(),
-        'form': form
+        'form': form,
+        'session': request.session,
+        'user': request.user
     }
     return render(request, 'question.html', content)
 
@@ -69,11 +75,15 @@ def ask_add(request):
     if request.method == 'POST':
         form = AskForm(request.POST)
         if form.is_valid():
+            if not request.user.is_authenticated:
+                return HttpResponseRedirect(reverse('login'))
             question = form.save()
+            question.author = request.user
+            question.save()
             return HttpResponseRedirect(question.get_absolute_url())
     else:
         form = AskForm()
-    return render(request, 'ask_form.html', {'form': form})
+    return render(request, 'ask_form.html', {'form': form, 'session': request.session, 'user': request.user})
 
 
 def signup(request):
@@ -81,7 +91,7 @@ def signup(request):
         form = SignupForm(request.POST)
         if form.is_valid():
             user = form.save()
-            # TODO вход на сайт
+            login(request, user)
             return HttpResponseRedirect(reverse('new_questions'))
     else:
         form = SignupForm()

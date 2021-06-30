@@ -130,6 +130,8 @@ class QuestionViewTest(TestCase):
                 author=user,
                 rating=question_num
             )
+        # Create test user
+        cls.test_user = User.objects.create(email='a@b.com')
 
     def test_question_url_resolves_to_page_view(self):
         found = resolve('/question/1/')
@@ -151,12 +153,12 @@ class QuestionViewTest(TestCase):
         resp = self.client.get(reverse('question', kwargs={'id': 2}))
         self.assertEqual(resp.status_code, 200)
 
-    def test_view_nonexistent_question(self):
+    def test_page_with_a_nonexistent_question_returns_404_error(self):
         self.assertFalse(Question.objects.filter(pk=3).exists())
         resp = self.client.get(reverse('question', kwargs={'id': 3}))
         self.assertEqual(resp.status_code, 404)
 
-    def test_page_returns_correct_html(self):
+    def test_page_with_an_existing_question_returns_correct_html(self):
         # Create 3 answers for existing question
         q = Question.objects.get(pk=1)
         for answer_num in range(3):
@@ -165,32 +167,32 @@ class QuestionViewTest(TestCase):
                 question=q,
                 author=q.author
             )
-        resp = self.client.get(reverse('question', kwargs={'id': 1}))
+        resp = self.client.get(q.get_absolute_url())
         self.assertContains(resp, escape('Question 0'))
         self.assertContains(resp, escape('text 0'))
         self.assertContains(resp, escape('Answer 0'))
         self.assertContains(resp, escape('Answer 1'))
         self.assertContains(resp, escape('Answer 2'))
 
-    def test_question_page_uses_answer_form(self):
+    def test_page_with_an_existing_question_uses_answer_form(self):
         response = self.client.get(reverse('question', kwargs={'id': 1}))
         self.assertIsInstance(response.context['form'], AnswerForm)
 
-    def test_can_save_a_POST_request_to_an_existing_question(self):
+    def test_the_data_is_correctly_passed_to_the_form_context(self):
+        # log in
+        self.client.force_login(self.test_user)
         question = Question.objects.get(pk=1)
         response = self.client.get(f'/question/{question.id}/')
         self.assertEqual(response.context['question'], question)
         self.assertFalse(response.context['answers'])
+        self.assertEqual(response.context['user'], self.test_user)
 
-        response = self.client.post(
-            f'/question/{question.id}/',
-            data={'text': 'A new answer for an existing question'}
-        )
+    def test_can_save_a_POST_request_to_an_existing_question_if_user_is_authenticated(self):
+        # log in
+        self.client.force_login(self.test_user)
+        question = Question.objects.get(pk=1)
+        self.client.post(f'/question/{question.id}/', data={'text': 'A new answer for an existing question'})
         self.assertEqual(Answer.objects.count(), 1)
-        new_answer = Answer.objects.first()
-        self.assertEqual(new_answer.text, 'A new answer for an existing question')
-        self.assertEqual(new_answer.question, question)
-        self.assertEqual(new_answer.author, None)
 
     def test_for_invalid_input_doesnt_save_but_shows_errors(self):
         post_data = {'text': ''}
@@ -199,15 +201,17 @@ class QuestionViewTest(TestCase):
         self.assertContains(response, escape(EMPTY_TEXT_ERROR))
 
     def test_answer_author_is_saved_if_user_is_authenticated(self):
-        # TODO fix this method
-        user = User.objects.create(email='a@b.com')
-        self.client.force_login(user)
+        self.client.force_login(self.test_user)
         self.client.post(reverse('question', kwargs={'id': 1}), data={'text': 'new answer'})
         new_answer = Answer.objects.first()
-        # author is None for now
-        self.assertEqual(new_answer.author, user.id)
+        question = Question.objects.get(pk=1)
+        self.assertEqual(new_answer.text, 'new answer')
+        self.assertEqual(new_answer.question, question)
+        self.assertEqual(new_answer.author, self.test_user)
 
-    def test_redirects_to_form_returned_object_if_form_valid(self):
+    def test_redirects_to_form_returned_object_if_form_valid_and_user_is_authenticated(self):
+        # log in
+        self.client.force_login(self.test_user)
         question = Question.objects.get(pk=1)
         post_data = {'text': 'A new answer'}
         response = self.client.post(reverse('question', kwargs={'id': 1}), data=post_data)
@@ -216,6 +220,8 @@ class QuestionViewTest(TestCase):
         self.assertRedirects(response, f'/question/{new_answer.question.id}/')
 
     def test_new_answer_display_on_question_page_after_redirect(self):
+        # log in
+        self.client.force_login(self.test_user)
         question = Question.objects.get(pk=1)
         for answer_num in range(2):
             Answer.objects.create(
@@ -230,9 +236,10 @@ class QuestionViewTest(TestCase):
         self.assertContains(response, escape('Answer 1'))
 
         post_data = {'text': 'A new answer'}
-        self.client.post(reverse('question', kwargs={'id': 1}), data=post_data)
-        new_answer = Answer.objects.first()
-        response = self.client.get(f'/question/{new_answer.question.id}/')
+        response = self.client.post(reverse('question', kwargs={'id': 1}), data=post_data)
+        self.assertEqual(response.url, '/question/1/')
+
+        response = self.client.get(response.url)
         self.assertContains(response, escape('Question 0'))
         self.assertContains(response, escape('text 0'))
         self.assertContains(response, escape('Answer 0'))
@@ -244,6 +251,12 @@ class QuestionViewTest(TestCase):
         post_data = {'text': ''}
         response = self.client.post(reverse('question', kwargs={'id': 1}), data=post_data)
         self.assertTemplateUsed(response, 'question.html')
+
+    def test_redirects_to_login_if_form_valid_but_user_isnt_authenticated(self):
+        post_data = {'title': 'Question 1', 'text': 'A new question'}
+        response = self.client.post(reverse('question', kwargs={'id': 1}), data=post_data)
+        self.assertRedirects(response, reverse('login'))
+        self.assertTemplateNotUsed(response, 'question.html')
 
 
 class LoginPageTest(TestCase):
@@ -291,6 +304,7 @@ class LoginPageTest(TestCase):
         self.assertIsNotNone(response.context['session'].session_key)
         self.assertEqual(response.context['user'], user)
 
+        # TODO add session in popular view
         new_response = self.client.get(reverse('popular'))
         self.assertIsNotNone(new_response.context['session'].session_key)
         self.assertEqual(response.context['session'].session_key, new_response.context['session'].session_key)
@@ -362,45 +376,80 @@ class AddQuestionViewTest(TestCase):
     """Ask page test"""
 
     def test_uses_ask_form_template(self):
-        response = self.client.get('/ask/')
+        response = self.client.get(reverse('ask'))
         self.assertTemplateUsed(response, 'ask_form.html')
 
     def test_ask_page_uses_ask_form(self):
-        response = self.client.get('/ask/')
+        response = self.client.get(reverse('ask'))
         self.assertIsInstance(response.context['form'], AskForm)
 
-    def test_can_save_a_POST_request(self):
+    def test_can_save_a_POST_request_if_user_is_authenticated(self):
+        # log in
+        user = User.objects.create(email='a@b.com')
+        self.client.force_login(user)
+
+        # post request
         post_data = {'title': 'Question 1', 'text': 'A new question'}
-        self.client.post('/ask/', data=post_data)
+        self.client.post(reverse('ask'), data=post_data)
         self.assertEqual(Question.objects.count(), 1)
         new_question = Question.objects.first()
         self.assertEqual(new_question.title, 'Question 1')
         self.assertEqual(new_question.text, 'A new question')
-        self.assertEqual(new_question.author, None)
 
-    def test_for_invalid_input_doesnt_save_but_shows_errors(self):
+    def test_for_invalid_input_doesnt_save_question_but_shows_errors(self):
         post_data = {'title': '', 'text': ''}
-        response = self.client.post('/ask/', data=post_data)
+        response = self.client.post(reverse('ask'), data=post_data)
         self.assertEqual(Question.objects.count(), 0)
         self.assertContains(response, escape(EMPTY_TITLE_ERROR))
         self.assertContains(response, escape(EMPTY_TEXT_ERROR))
 
     def test_question_author_is_saved_if_user_is_authenticated(self):
-        # TODO fix this method
         user = User.objects.create(email='a@b.com')
         self.client.force_login(user)
-        self.client.post('/ask/', data={'title': 'Question', 'text': 'new question'})
-        question_ = Question.objects.first()
-        # author is None for now
-        self.assertEqual(question_.author, user.id)
+        self.client.post(reverse('ask'), data={'title': 'Question', 'text': 'new question'})
+        new_question = Question.objects.first()
+        self.assertEqual(new_question.author, user)
 
     def test_redirects_to_form_returned_object_if_form_valid(self):
+        user = User.objects.create(email='a@b.com')
+        self.client.force_login(user)
         post_data = {'title': 'Question 1', 'text': 'A new question'}
-        response = self.client.post('/ask/', data=post_data)
-        question_ = Question.objects.first()
-        self.assertRedirects(response, f'/question/{question_.id}/')
+        response = self.client.post(reverse('ask'), data=post_data)
+        new_question = Question.objects.first()
+        self.assertRedirects(response, f'/question/{new_question.id}/')
 
     def test_renders_template_with_form_if_form_invalid(self):
         post_data = {'title': '', 'text': ''}
-        response = self.client.post('/ask/', data=post_data)
+        response = self.client.post(reverse('ask'), data=post_data)
         self.assertTemplateUsed(response, 'ask_form.html')
+
+    def test_redirects_to_login_if_form_valid_but_user_isnt_authenticated(self):
+        post_data = {'title': 'Question 1', 'text': 'A new question'}
+        response = self.client.post(reverse('ask'), data=post_data)
+        self.assertRedirects(response, reverse('login'))
+        self.assertTemplateNotUsed(response, 'ask_form.html')
+
+    def test_doesnt_redirect_on_GET_request_and_session_key_is_none_if_user_isnt_authenticated(self):
+        response = self.client.get(reverse('ask'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['session'].session_key)
+        # self.assertIsNone(self.client.session.session_key)
+
+    def test_doesnt_redirect_on_GET_request_and_session_key_isnt_none_if_user_is_authenticated(self):
+        user = User.objects.create(email='a@b.com')
+        self.client.force_login(user)
+        response = self.client.get(reverse('ask'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.context['session'].session_key)
+        # self.assertIsNotNone(self.client.session.session_key)
+
+    def test_the_session_is_saved_if_the_form_is_invalid_but_user_is_authenticated(self):
+        user = User.objects.create(email='a@b.com')
+        self.client.force_login(user)
+        response = self.client.get(reverse('ask'))
+        self.assertIsNotNone(response.context['session'].session_key)
+        # bad post data
+        post_data = {'title': '', 'text': ''}
+        new_response = self.client.post(reverse('ask'), data=post_data)
+        self.assertIsNotNone(new_response.context['session'].session_key)
+        self.assertEqual(response.context['session'].session_key, new_response.context['session'].session_key)
