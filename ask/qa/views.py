@@ -1,16 +1,13 @@
 from django.shortcuts import render, get_object_or_404
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponseRedirect
 from django.http import Http404
 from django.core.paginator import Paginator
 from django.urls import reverse
 from django.contrib.auth import authenticate, login
 
-from qa.models import Question
+from qa.models import Question, QuestionLikes
 from qa.forms import AskForm, AnswerForm, SignupForm, LoginForm
-
-
-def test(request, *args, **kwargs):
-    return HttpResponse('OK')
+from .ajax import HttpResponseAjax, HttpResponseAjaxError, login_required_ajax
 
 
 def paginate(request, qs, base_url):
@@ -61,6 +58,7 @@ def question_view(request, id):
             return HttpResponseRedirect(question.get_absolute_url())
     else:
         form = AnswerForm()
+
     content = {
         'question': question,
         'answers': question.answer_set.all(),
@@ -68,6 +66,11 @@ def question_view(request, id):
         'session': request.session,
         'user': request.user
     }
+
+    if request.user.is_authenticated:
+        if question in Question.objects.filter(likes=request.user):
+            button_like = QuestionLikes.objects.get(question=question, user=request.user).is_liked
+            content['button_like'] = button_like
     return render(request, 'question.html', content)
 
 
@@ -111,3 +114,41 @@ def login_view(request):
     else:
         form = LoginForm()
     return render(request, 'login_form.html', {'form': form, 'session': request.session, 'user': request.user})
+
+
+@login_required_ajax
+def add_like_to_the_question(request):
+    user = request.user
+    question = get_object_or_404(Question, pk=request.POST.get('question_id'))
+    operation = request.POST.get('operation')
+    # if user is authenticated
+    if question in Question.objects.filter(likes=user):
+        # request user has rated this question
+        row = QuestionLikes.objects.get(question=question, user=user)
+        if row.is_liked and operation == 'Dislike':
+            question.rating -= 2
+            row.is_liked = False
+            row.save()
+        elif row.is_liked and operation == 'Like':
+            question.rating -= 1
+            row.delete()
+        elif not row.is_liked and operation == 'Like':
+            question.rating += 2
+            row.is_liked = True
+            row.save()
+        elif not row.is_liked and operation == 'Dislike':
+            question.rating += 1
+            row.delete()
+    else:
+        # request user hasn't rated this question
+        QuestionLikes.objects.create(question=question, user=user, is_liked=(operation == 'Like'))
+        if operation == 'Like':
+            question.rating += 1
+        elif operation == 'Dislike':
+            question.rating -= 1
+    question.save()
+
+    if question:
+        return HttpResponseAjax(message='Your rating is accepted')
+
+    return HttpResponseAjaxError(code='bad_params', message='Question does not exist')
