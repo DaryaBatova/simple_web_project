@@ -9,5 +9,5 @@ urlpatterns = [
     path('question/<int:id>/', question_view, name='question'),
     path('ask/', ask_add, name='ask'),
     path('popular/', question_list_popular, name='popular'),
-    path('new/', test, name='new'),
+    path('like/', add_like_to_the_question, name='like'),
 ]
