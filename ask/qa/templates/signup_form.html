@@ -1,10 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Sign up on our website!</title>
-</head>
-<body>
+{% extends 'base.html' %}
+{% block title %} {{ block.super }} Sign up on our website! {% endblock %}
+{% block content %} {{ block.super }} 
     {% for err in form.non_field_errors %}
         <div class="alert alert-danger"> {{ err }} </div>
     {% endfor %}
@@ -12,9 +8,7 @@
         <fieldset>
         {% csrf_token %}
         {{ form.as_p }}
-        </fieldset>
-        <button type="submit" class="btn btn-primary btn-block"> Sign up </button>
+    </fieldset>
+    <button type="submit" class="btn btn-primary btn-block"> Sign up </button>
     </form>
-    <div><a href="{%  url 'new_questions' %}"> Return to main page </a></div>
-</body>
-</html>
+{% endblock %}

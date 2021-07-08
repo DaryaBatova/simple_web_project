@@ -1,28 +1,116 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ question.title }}</title>
-</head>
-<body>
-    <h1>{{ question.title }}</h1>
-    <div>{{ question.text }}</div>
+{% extends 'base.html' %}
+{% block title %} {{ block.super }} {{ question.title }} {% endblock %}
+{% block content %} {{ block.super }} 
+    <style>
+        .b1 {
+        background: navy; /* Синий цвет фона */
+        color: white; /* Белые буквы */
+        font-size: 9pt; /* Размер шрифта в пунктах */
+        }
+    </style>
+
+    <div class="question">
+        <h1>Question {{ question.id }}: {{ question.title }}</h1>
+        <h2>Rating: {{ question.rating }}</h2>
+        <p>{{ question.text }}</p>
+        <h3>Asked: {{ question.author.username }}. Added: {{ question.added_at|date:"d.m.Y" }}</h3>
+    </div>
+
+    {% if button_like is True %}
+        <input type="button" class="b1" id="like" name="{{ question.id }}" value="Like"/>
+        <input type="button" id="dislike" name="{{ question.id }}" value="Dislike"/>
+    {% elif button_like is False %}
+        <input type="button" id="like" name="{{ question.id }}" value="Like"/>
+        <input type="button" class="b1" id="dislike" name="{{ question.id }}" value="Dislike"/>
+    {% else %}
+        <input type="button" id="like" name="{{ question.id }}" value="Like"/>
+        <input type="button" id="dislike" name="{{ question.id }}" value="Dislike"/>
+    {% endif %}
+
+    <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+    <script type="text/javascript">
+        $("#like, #dislike").click(function () {
+            $.ajax({
+                type: "POST",
+                url: "{% url 'like' %}",
+                data: {'question_id': $(this).attr('name'),
+                    'operation': $(this).attr('value'), 'csrfmiddlewaretoken': '{{ csrf_token }}'},
+                dataType: "json",
+                success: function (response) {
+                    alert(response.message);
+                    location.reload(true);
+                },
+                error: function (rs, e) {
+                    alert(rs.responseText);
+                }
+            });
+        })
+    </script>
     <hr>
-    <ul>
-    {% for answer in answers %}
-        <li>{{ answer.text }} {{ answer.author_id }}</li>
+
+    <h2>Answers to this question:</h2>
+    <hr>
+    {% if answers %}
+        <div class="answers">
+            {% for answer in answers %}
+            <div class="answer">
+                <p>{{ answer.text }}</p>
+                <h3>Answered: {{ answer.author.username }}. Added: {{ answer.added_at|date:"d.m.Y H:i" }}:</h3>
+                {% if user == answer.author %}
+                    <input type="button" class="b1" id="delete_answer" name="{{ answer.id }}" value="Delete"/>
+                {% endif %}
+
+                <script type="text/javascript">
+                    $("#delete_answer").on('click', function () {
+                        let confirmation = confirm("Are you sure you want to remove the answer?");
+                        if (confirmation) {
+                            $.ajax({
+                                type: "POST",
+                                url: "{% url 'delete_answer' %}",
+                                data: {'answer_id': $(this).attr('name'), 'csrfmiddlewaretoken': '{{ csrf_token }}'},
+                                dataType: "json",
+                            }).done(
+                                function(response){
+                                    alert(response.message); 
+                                    location.reload(true);
+                                }).fail(
+                                function(){
+                                    alert("Error");
+                                }) 
+                        };
+                    })
+                </script>
+            </div>
+                <hr>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>There are no answers to this question yet.</p>
+    {% endif %}
+
+
+    {% for err in form.non_field_errors %}
+        <div class="alert alert-danger">{{ err }}</div>
     {% endfor %}
-    </ul>
-    <hr>
-    <form method="post" action="{{ question.get_absolute_url }}">
-        <fieldset>
+
+    <form class="form-horizontal" method="post" action="{{ question.get_absolute_url }}">
         {% csrf_token %}
-        {{ form.as_p }}
+        <fieldset>
+            {% for field in form %}
+                <div class="control-group {% if field.errors %}has-error{% endif %}">
+                    {% if field.name != 'question' %}
+                        <label class="control-label">{{ field.label }}</label>
+                        <span class="error text-danger">{{ field.errors.as_text }}</span>
+                        {% for error in field.errors %}
+                            <p> {{ error }} </p>
+                        {% endfor %}
+                        <p><textarea rows="10" cols="45" name="text" required oninvalid="this.setCustomValidity('The answer cannot be empty!')" oninput="setCustomValidity('')" ></textarea></p>
+                    {% endif %}
+                </div>
+            {% endfor %}
         </fieldset>
-        <button type="submit"> Ответить </button>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">To answer</button>
+        </div>
     </form>
-    <hr>
-    <div><a href="/ask/"> Ask a new question </a></div>
-    <div><a href="/"> Return to main page </a></div>
-</body>
-</html> 
+{% endblock %}

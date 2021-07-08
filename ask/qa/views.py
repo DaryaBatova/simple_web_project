@@ -3,9 +3,9 @@ from django.http import HttpResponseRedirect
 from django.http import Http404
 from django.core.paginator import Paginator
 from django.urls import reverse
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 
-from qa.models import Question, QuestionLikes
+from qa.models import Question, Answer, QuestionLikes
 from qa.forms import AskForm, AnswerForm, SignupForm, LoginForm
 from .ajax import HttpResponseAjax, HttpResponseAjaxError, login_required_ajax
 
@@ -116,6 +116,12 @@ def login_view(request):
     return render(request, 'login_form.html', {'form': form, 'session': request.session, 'user': request.user})
 
 
+def logout_view(request):
+    if request.user is not None:
+        logout(request)
+        return HttpResponseRedirect(reverse('new_questions'))
+
+
 @login_required_ajax
 def add_like_to_the_question(request):
     user = request.user
@@ -152,3 +158,12 @@ def add_like_to_the_question(request):
         return HttpResponseAjax(message='Your rating is accepted')
 
     return HttpResponseAjaxError(code='bad_params', message='Question does not exist')
+
+
+def delete_answer(request):
+    # id in request.POST
+    answer = get_object_or_404(Answer, pk=request.POST.get('answer_id')) 
+    if request.user == answer.author:
+        answer.delete()
+    # return HttpResponseRedirect(answer.question.get_absolute_url())
+    return HttpResponseAjax(message='Your answer has been successfully deleted!')

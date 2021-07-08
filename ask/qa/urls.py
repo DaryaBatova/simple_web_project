@@ -10,4 +10,6 @@ urlpatterns = [
     path('ask/', ask_add, name='ask'),
     path('popular/', question_list_popular, name='popular'),
     path('like/', add_like_to_the_question, name='like'),
+    path('logout/', logout_view, name='logout'),
+    path('answers/delete/', delete_answer, name='delete_answer'),
 ]

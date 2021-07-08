@@ -326,6 +326,22 @@ class LoginPageTest(TestCase):
         self.assertTemplateUsed(response, 'login_form.html')
 
 
+class LogoutTest(TestCase):
+
+    def test_logout_url_resolves_to_page_view(self):
+        found = resolve('/logout/')
+        self.assertEqual(found.func, logout_view)
+
+    def test_user_can_logout_and_redirects_to_page_with_new_questions(self):
+        user = User.objects.create(email='a@b.com')
+        # is_authenticated this attribute is True for any User instance
+        self.assertTrue(user.is_authenticated)
+        self.client.force_login(user)
+        response = self.client.get(reverse('logout'))
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse('new_questions'))
+
+
 class SignupPageTest(TestCase):
     """Registration page test"""
 
@@ -546,3 +562,41 @@ class AddLikeViewTest(TestCase):
 
         q1 = Question.objects.get(pk=1)
         self.assertEqual(q1.rating, 1)
+
+
+class DeleteAnswerViewTest(TestCase):
+
+    def setUp(self):
+        # create two users
+        self.joe = User.objects.create(username='joe')
+        self.bob = User.objects.create(username='bob')
+        # create question
+        self.q1 = Question.objects.create(title='Question 1', text='New question', author=self.joe)
+        # create two answers
+        self.a1 = Answer.objects.create(text="It's Joe answer", question=self.q1, author=self.joe)
+        self.a2 = Answer.objects.create(text="It's Bob answer", question=self.q1, author=self.bob)
+
+    def test_joe_can_delete_his_answer(self):
+        self.client.force_login(self.joe)
+        self.assertEqual(Answer.objects.count(), 2)
+        response = self.client.post(reverse('delete_answer'), {'answer_id': self.a1.pk})
+        self.assertEqual(Answer.objects.count(), 1)
+        self.assertFalse(Answer.objects.filter(author=self.joe).exists())
+
+    def test_after_deleting_the_answer_is_not_displayed(self):
+        self.client.force_login(self.joe)
+        response = self.client.get(reverse('question', kwargs={'id': self.q1.pk}))
+        self.assertContains(response, escape("It's Joe answer"))
+        self.assertContains(response, escape("It's Bob answer"))
+        response = self.client.post(reverse('delete_answer'), {'answer_id': self.a1.pk})
+        new_response = self.client.get(response.url)
+        self.assertNotContains(new_response, escape("It's Joe answer"))
+        self.assertContains(new_response, escape("It's Bob answer"))
+
+    def test_joe_cannt_delete_bobs_answer(self):
+        self.client.force_login(self.joe)
+        self.assertEqual(Answer.objects.count(), 2)
+        response = self.client.post(reverse('delete_answer'), {'answer_id': self.a2.pk})
+        self.assertEqual(Answer.objects.count(), 2)
+        self.assertTrue(Answer.objects.filter(author=self.bob).exists())
+        
