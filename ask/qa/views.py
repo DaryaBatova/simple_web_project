@@ -4,6 +4,7 @@ from django.http import Http404
 from django.core.paginator import Paginator
 from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.decorators import login_required
 
 from qa.models import Question, Answer, QuestionLikes
 from qa.forms import AskForm, AnswerForm, SignupForm, LoginForm
@@ -40,6 +41,12 @@ def question_list_new(request):
 def question_list_popular(request):
     qs = Question.objects.popular()
     return paginate(request, qs, base_url=reverse('popular') + '?page=')
+
+
+@login_required(login_url='/login/')
+def users_question_list(request):
+    qs = Question.objects.filter(author=request.user).order_by('-added_at')
+    return paginate(request, qs, base_url=reverse('my_questions') + '?page=') 
 
 
 def question_view(request, id):
@@ -167,3 +174,9 @@ def delete_answer(request):
         answer.delete()
     # return HttpResponseRedirect(answer.question.get_absolute_url())
     return HttpResponseAjax(message='Your answer has been successfully deleted!')
+
+def delete_question(request, question_id):
+    question = get_object_or_404(Question, pk=question_id)
+    if request.user == question.author:
+        question.delete()
+    return HttpResponseRedirect(reverse('my_questions'))

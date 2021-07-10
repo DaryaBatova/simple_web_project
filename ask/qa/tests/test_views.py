@@ -116,6 +116,64 @@ class QuestionListPopularTest(TestCase):
         self.assertNotContains(resp, escape('Question 3'))
 
 
+class QuestionListMyTest(TestCase):
+
+    def setUp(self):
+        # Create users for tests
+        self.user1 = User.objects.create(username='user1')
+        self.user2 = User.objects.create(username='user2')
+        # Create questions:
+        number_of_questions = 13
+        for question_num in range(number_of_questions):
+            Question.objects.create(
+                title='Question ' + str(question_num),
+                text='text ' + str(question_num),
+                author=self.user1,
+                rating=question_num
+            )
+
+    def test_my_questions_url_resolves_to_page_view(self):
+        found = resolve('/my-questions/')
+        self.assertEqual(found.func, users_question_list)
+
+    def test_view_url_exists_at_desired_location(self):
+        self.client.force_login(self.user2)
+        resp = self.client.get('/my-questions/')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_view_url_accessible_by_name(self):
+        self.client.force_login(self.user2)
+        resp = self.client.get(reverse('my_questions'))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_view_uses_correct_template(self):
+        self.client.force_login(self.user2)
+        resp = self.client.get(reverse('my_questions'))
+        self.assertEqual(resp.status_code, 200)
+
+        self.assertTemplateUsed(resp, 'questions_new.html')
+
+    def test_user_is_logged_in_but_hasnt_asked_questions(self):
+        self.client.force_login(self.user2)
+        response = self.client.get(reverse('my_questions'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, escape('There are no questions yet.'))
+
+    def test_user_is_logged_in_and_has_asked_questions(self):
+        self.client.force_login(self.user1)
+        response = self.client.get(reverse('my_questions')+'?page=2')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, escape('Question 0'))
+        self.assertContains(response, escape('Question 1'))
+        self.assertContains(response, escape('Question 2'))
+        self.assertNotContains(response, escape('Question 3'))
+
+    def test_if_user_isnt_logged_in_redirect_to_login(self):
+        response = self.client.get(reverse('my_questions'))
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse('login') + '?next=/my-questions/')
+
+
 class QuestionViewTest(TestCase):
 
     @classmethod
@@ -589,7 +647,8 @@ class DeleteAnswerViewTest(TestCase):
         self.assertContains(response, escape("It's Joe answer"))
         self.assertContains(response, escape("It's Bob answer"))
         response = self.client.post(reverse('delete_answer'), {'answer_id': self.a1.pk})
-        new_response = self.client.get(response.url)
+        # new_response = self.client.get(response.url)
+        new_response = self.client.get(reverse('question', kwargs={'id': self.q1.pk}))
         self.assertNotContains(new_response, escape("It's Joe answer"))
         self.assertContains(new_response, escape("It's Bob answer"))
 
@@ -599,4 +658,48 @@ class DeleteAnswerViewTest(TestCase):
         response = self.client.post(reverse('delete_answer'), {'answer_id': self.a2.pk})
         self.assertEqual(Answer.objects.count(), 2)
         self.assertTrue(Answer.objects.filter(author=self.bob).exists())
+
+
+class DeleteQuestionViewTest(TestCase):
+
+    def setUp(self):
+        # create two users
+        self.joe = User.objects.create(username='joe')
+        self.bob = User.objects.create(username='bob')
+        # create two questions
+        self.q1 = Question.objects.create(title='Question 1', text='New question', author=self.joe)
+        self.q2 = Question.objects.create(title='Question 2', text='New question', author=self.bob)
+        # create two answers
+        self.a1 = Answer.objects.create(text="It's Joe answer", question=self.q1, author=self.joe)
+        self.a2 = Answer.objects.create(text="It's Bob answer", question=self.q1, author=self.bob)
+
+    def test_joe_can_delete_his_question(self):
+        self.client.force_login(self.joe)
+        self.assertEqual(Question.objects.count(), 2)
+        response = self.client.post(reverse('delete_question', kwargs={'question_id': self.q1.pk}))
+        self.assertEqual(Question.objects.count(), 1)
+        self.assertFalse(Question.objects.filter(author=self.joe).exists())
+
+    def test_joe_delete_his_question_the_answers_to_it_are_deleted(self):
+        self.client.force_login(self.joe)
+        self.assertEqual(Question.objects.count(), 2)
+        self.assertEqual(Answer.objects.filter(question=self.q1).count(), 2)
+        response = self.client.post(reverse('delete_question', kwargs={'question_id': self.q1.pk}))
+        self.assertEqual(Question.objects.count(), 1)
+        self.assertEqual(Answer.objects.filter(question=self.q1).count(), 0)
+        self.assertFalse(Question.objects.filter(author=self.joe).exists())
+
+    def test_after_deleting_redirect_to_page_with_users_questions(self):
+        self.client.force_login(self.joe)
+        response = self.client.post(reverse('delete_question', kwargs={'question_id': self.q1.pk}))
+        self.assertEqual(response.url, reverse('my_questions'))
+        new_response = self.client.get(response.url)
+        self.assertContains(new_response, escape("There are no questions yet."))
+
+    def test_joe_cannt_delete_bobs_question(self):
+        self.client.force_login(self.joe)
+        self.assertEqual(Question.objects.count(), 2)
+        response = self.client.post(reverse('delete_question', kwargs={'question_id': self.q2.pk}))
+        self.assertEqual(Question.objects.count(), 2)
+        self.assertTrue(Question.objects.filter(author=self.bob).exists())
         

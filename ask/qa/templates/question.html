@@ -12,6 +12,14 @@
     <div class="question">
         <h1>Question {{ question.id }}: {{ question.title }}</h1>
         <h2>Rating: {{ question.rating }}</h2>
+        {% if user == question.author %}
+        <div>
+            <form method="POST" class="form_group" onsubmit="return confirm('Do you really want to delete this question?');" action="{% url 'delete_question' question_id=question.id %}">
+                {% csrf_token %}
+                <input type="submit" value="Delete this question">
+            </form>
+        </div>
+        {% endif %}
         <p>{{ question.text }}</p>
         <h3>Asked: {{ question.author.username }}. Added: {{ question.added_at|date:"d.m.Y" }}</h3>
     </div>
