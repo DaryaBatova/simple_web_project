@@ -11,4 +11,5 @@ urlpatterns = [
     path('users/', UsersListView.as_view(), name='api_users'),
     path('user/<int:user_id>/answers/', UsersAnswersListView.as_view(), name='api_users_answers'),
     path('question/<int:question_id>/likes/', LikesToQuestionListView.as_view(), name='api_question_likes'),
+    path('user/<int:user_id>/likes/', QuestionsLikesByUserListView.as_view(), name='api_question_likes'),
 ]

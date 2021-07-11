@@ -1,4 +1,4 @@
-from qa.models import Question, Answer
+from qa.models import Question, Answer, QuestionLikes
 from django.contrib.auth.models import User
 from rest_framework import serializers, viewsets, generics, routers
 from rest_framework.exceptions import APIException
@@ -10,21 +10,46 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['username', 'email']
 
 
+class UserLikeSerializer(serializers.ModelSerializer):
+    rate = serializers.CharField()
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'rate']
+
+
 class QuestionSerializer(serializers.ModelSerializer):
-    author = serializers.DictField()
+    author = serializers.SerializerMethodField()
 
     class Meta:
         model = Question
         fields = ['title', 'text', 'added_at', 'rating', 'author']
 
+    def get_author(self, obj):
+        return {obj.author.username: obj.author.email}
+
+
+class QuestionLikeSerializer(serializers.ModelSerializer):
+    rate = serializers.CharField()
+
+    class Meta:
+        model = Question
+        fields = ['title', 'text', 'added_at', 'rating', 'rate']
+
 
 class AnswerSerializer(serializers.ModelSerializer):
-    author = serializers.DictField()
-    question = serializers.CharField()
+    author = serializers.SerializerMethodField()
+    question = serializers.SerializerMethodField()
 
     class Meta:
         model = Answer
         fields = ['text', 'author', 'added_at', 'question']
+
+    def get_author(self, obj):
+        return {obj.author.username: obj.author.email}
+
+    def get_question(self, obj):
+        return obj.question.title
 
 
 class QuestionDoesNotExistException(APIException):
@@ -44,22 +69,7 @@ class QuestionsListView(generics.ListAPIView):
     API endpoint that allows questions to be viewed.
     """
     serializer_class = QuestionSerializer
-
-    def get_queryset(self):
-        queryset = []
-        questions = Question.objects.all()
-        for question in questions:
-            queryset.append(
-                {
-                    'id': question.pk,
-                    'title': question.title,
-                    'text': question.text,
-                    'added_at': question.added_at,
-                    'rating': question.rating,
-                    'author': {question.author.username: question.author.email},
-                }
-            )
-        return queryset
+    queryset = Question.objects.all()
 
 
 class PopularQuestionsListView(generics.ListAPIView):
@@ -67,22 +77,7 @@ class PopularQuestionsListView(generics.ListAPIView):
     API endpoint that allows popular questions to be viewed.
     """
     serializer_class = QuestionSerializer
-
-    def get_queryset(self):
-        queryset = []
-        questions = Question.objects.popular()
-        for question in questions:
-            queryset.append(
-                {
-                    'id': question.pk,
-                    'title': question.title,
-                    'text': question.text,
-                    'added_at': question.added_at,
-                    'rating': question.rating,
-                    'author': {question.author.username: question.author.email},
-                }
-            )
-        return queryset
+    queryset = Question.objects.popular()
 
 
 class AnswersListView(generics.ListAPIView):
@@ -90,21 +85,7 @@ class AnswersListView(generics.ListAPIView):
     API endpoint that allows answers to be viewed.
     """
     serializer_class = AnswerSerializer
-
-    def get_queryset(self):
-        queryset = []
-        answers = Answer.objects.all()
-        for answer in answers:
-            queryset.append(
-                {
-                    'id': answer.pk,
-                    'text': answer.text,
-                    'added_at': answer.added_at,
-                    'author': {answer.author.username: answer.author.email},
-                    'question': answer.question.title
-                }
-            )
-        return queryset
+    queryset = Answer.objects.all()
 
 
 class AnswersToQuestionListView(generics.ListAPIView):
@@ -117,18 +98,7 @@ class AnswersToQuestionListView(generics.ListAPIView):
         question_id = self.kwargs['question_id']
         try:
             question = Question.objects.get(pk=question_id)
-            queryset = []
-            answers = Answer.objects.filter(question=question)
-            for answer in answers:
-                queryset.append(
-                    {
-                        'id': answer.pk,
-                        'text': answer.text,
-                        'added_at': answer.added_at,
-                        'author': {answer.author.username: answer.author.email},
-                        'question': answer.question.title
-                    }
-                )
+            queryset = Answer.objects.filter(question=question)
             return queryset
         except Question.DoesNotExist:
             raise QuestionDoesNotExistException()
@@ -144,19 +114,7 @@ class UsersQuestionsListView(generics.ListAPIView):
         user_id = self.kwargs['user_id']
         try:
             user = User.objects.get(pk=user_id)
-            queryset = []
-            questions = Question.objects.filter(author=user)
-            for question in questions:
-                queryset.append(
-                    {
-                        'id': question.pk,
-                        'title': question.title,
-                        'text': question.text,
-                        'added_at': question.added_at,
-                        'rating': question.rating,
-                        'author': {question.author.username: question.author.email},
-                    }
-                )
+            queryset = Question.objects.filter(author=user)
             return queryset
         except User.DoesNotExist:
             raise UserDoesNotExistException()
@@ -167,10 +125,7 @@ class UsersListView(generics.ListAPIView):
     API endpoint that allows users to be viewed.
     """
     serializer_class = UserSerializer
-
-    def get_queryset(self):
-        queryset = User.objects.all()
-        return queryset
+    queryset = User.objects.all()
 
 
 class UsersAnswersListView(generics.ListAPIView):
@@ -183,18 +138,7 @@ class UsersAnswersListView(generics.ListAPIView):
         user_id = self.kwargs['user_id']
         try:
             user = User.objects.get(pk=user_id)
-            queryset = []
-            answers = Answer.objects.filter(author=user)
-            for answer in answers:
-                queryset.append(
-                    {
-                        'id': answer.pk,
-                        'text': answer.text,
-                        'added_at': answer.added_at,
-                        'author': {answer.author.username: answer.author.email},
-                        'question': answer.question.title
-                    }
-                )
+            queryset = Answer.objects.filter(author=user)
             return queryset
         except User.DoesNotExist:
             raise UserDoesNotExistException()
@@ -204,14 +148,53 @@ class LikesToQuestionListView(generics.ListAPIView):
     """
     API endpoint that allows users who rated the requested question to be viewed.
     """
-    serializer_class = UserSerializer
+    serializer_class = UserLikeSerializer
 
     def get_queryset(self):
         question_id = self.kwargs['question_id']
         try:
             question = Question.objects.get(pk=question_id)
-            queryset = User.objects.filter(questions=question)
+            queryset = []
+            users = User.objects.filter(questions=question, question_likes__is_liked=True)
+            for user in users:
+                rate = 'Like' if QuestionLikes.objects.get(user=user, question=question).is_liked else 'Dislike'
+                queryset.append(
+                    {
+                        'username': user.username,
+                        'email': user.email,
+                        'rate': rate,
+                    }
+                )
             return queryset
         except Question.DoesNotExist:
             raise QuestionDoesNotExistException()
+
+
+class QuestionsLikesByUserListView(generics.ListAPIView):
+    """
+    API endpoint that allows questions rated by the requested user to be viewed.
+    """
+    serializer_class = QuestionLikeSerializer
+
+    def get_queryset(self):
+        user_id = self.kwargs['user_id']
+        try:
+            user = User.objects.get(pk=user_id)
+            queryset = []
+            questions = Question.objects.filter(likes=user)
+            for question in questions:
+                rate = 'Like' if QuestionLikes.objects.get(user=user, question=question).is_liked else 'Dislike'
+                queryset.append(
+                    {
+                        'id': question.pk,
+                        'title': question.title,
+                        'text': question.text,
+                        'added_at': question.added_at,
+                        'rating': question.rating,
+                        'rate': rate
+                    }
+                )
+            return queryset
+        except User.DoesNotExist:
+            raise UserDoesNotExistException()
 
