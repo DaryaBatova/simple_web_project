@@ -63,7 +63,7 @@
             {% for answer in answers %}
             <div class="answer">
                 <p>{{ answer.text }}</p>
-                <h3>Answered: {{ answer.author.username }}. Added: {{ answer.added_at|date:"d.m.Y H:i" }}:</h3>
+                <h3>Answered: {{ answer.author.username }}. Added: {{ answer.added_at|date:"d.m.Y" }}:</h3>
                 {% if user == answer.author %}
                     <input type="button" class="b1" id="delete_answer" name="{{ answer.id }}" value="Delete"/>
                 {% endif %}
