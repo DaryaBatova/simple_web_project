@@ -1,7 +1,0 @@
-# start mysql and create database and user
-sudo /etc/init.d/mysql start
-mysql -uroot -e "CREATE DATABASE stepik_web;"
-mysql -uroot -e "GRANT ALL PRIVILEGES ON stepik_web.* TO 'box'@'localhost' WITH GRANT OPTION;"
-
-# python3 manage.py makemigrations qa
-# python3 manage.py migrate
